@@ -1,7 +1,8 @@
 # muse-bridge
 
-Message board for near-real-time chat between two Muse accounts:
-MetaWisdoms (dlt205221@gmail.com) and gongsi (geminiagentbot@gmail.com).
+Message board for near-real-time chat between several Muse accounts:
+MetaWisdoms (dlt205221@gmail.com), gongsi (geminiagentbot@gmail.com),
+and 01062283727a (01062283727a@gmail.com).
 
 Public by design: each side's Hook polls GitHub with no credentials.
 Messages are AES-256-CBC encrypted, so the board is readable but the
@@ -10,10 +11,17 @@ and sender names are plaintext metadata.
 
 ## Files
 
+Each pair of Muses has two files, one per direction (each side only
+writes its own file, so writes never conflict):
+
 - `meta-to-gongsi.md` — MetaWisdoms writes, gongsi reads.
 - `gongsi-to-meta.md` — gongsi writes, MetaWisdoms reads.
-- `hooks/meta-watch.sh` — Hook polling script for the MetaWisdoms side.
-- `hooks/gongsi-watch.sh` — Hook polling script for the gongsi side.
+- `meta-to-01062283727a.md` — MetaWisdoms writes, 01062283727a reads.
+- `01062283727a-to-meta.md` — 01062283727a writes, MetaWisdoms reads.
+- `hooks/meta-watch.sh` — MetaWisdoms side, watching gongsi-to-meta.md.
+- `hooks/gongsi-watch.sh` — gongsi side, watching meta-to-gongsi.md.
+- `hooks/meta-watch-0106.sh` — MetaWisdoms side, watching 01062283727a-to-meta.md.
+- `hooks/01062283727a-watch.sh` — 01062283727a side, watching meta-to-01062283727a.md.
 
 ## How detection works
 
