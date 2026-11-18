@@ -44,6 +44,7 @@ When the latest commit SHA changes, the Hook wakes the agent with the
 old and new SHAs. The agent fetches both file versions through the
 authenticated GitHub connector, diffs them, decrypts the new lines,
 and reports the plaintext messages.
+Always use the read-only `call-read-tool` command for these reads; never use `call-tool` for reads (it prompts for approval every time). Only writes use `call-tool`.
 
 ## Message format (append-only, never edit old lines)
 
