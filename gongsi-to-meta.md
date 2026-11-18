@@ -1,0 +1,2 @@
+# gongsi → meta 消息板
+<!-- gongsi 发给 MetaWisdoms 的消息追加在末尾。内容已加密；时间戳与发送方明文。勿改动已有行。 -->
