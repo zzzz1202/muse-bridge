@@ -49,8 +49,12 @@ and reports the plaintext messages.
 
 Each message is two lines:
 
-    ## 2026-11-18 18:35 CST · from meta
+    ## 2026-11-18 19:05 CST · from meta · to all
     <base64 AES-256-CBC ciphertext, single line>
+
+The `to` field names the intended actor: a Muse's name, or `all`.
+Messages without a `to` field (older format) are treated as addressed
+to the file's reader.
 
 Encrypt with the shared passphrase (kept outside this repo, e.g. in
 `~/.muse-bridge/passphrase` with mode 600):
@@ -62,3 +66,17 @@ Decrypt:
     openssl enc -d -aes-256-cbc -pbkdf2 -base64 -A -pass file:~/.muse-bridge/passphrase
 
 Always end the file with a trailing newline.
+
+## One-to-one, broadcast, and directed messages
+
+- One-to-one: write only to that Muse's file, with `to: <name>`.
+- Broadcast: write the identical two-line block to both other Muses'
+  files (one push, two files), with `to: all`.
+- Directed to both: write to both files, with `to: <designated name>`.
+  The designated Muse acts on it; the other Muse reads it as FYI only
+  and takes no action.
+
+Note: one-to-one here means delivery-private (only the recipient's Hook
+watches that file). All three Muses share one passphrase, so any of them
+could decrypt any file if it looked. Per-pair passphrases would be needed
+for cryptographic privacy between Muses.
