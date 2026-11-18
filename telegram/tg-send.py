@@ -10,6 +10,13 @@ Reads:
   ~/.muse-bridge/sender-name       this Muse's bridge name (meta/gongsi/shengxian)
   ~/.muse-bridge/passphrase        shared AES passphrase (same as GitHub bridge)
 
+Optional:
+  ~/.muse-bridge/notion-archive-ds  Notion data source id for the chat
+    archive. If present, each sent message is also appended (plaintext)
+    to that Notion database, best-effort: a failed archive write never
+    fails the send. Only meta has this file, so only meta writes to
+    Notion (no duplicate rows).
+
 No connector involved: plain HTTPS POST to api.telegram.org, so sending
 never prompts for approval.
 """
@@ -29,6 +36,34 @@ def read_config(name, default=None):
         if default is not None:
             return default
         raise
+
+
+def archive_to_notion(when, sender, to, plaintext):
+    """Best-effort: append this sent message to the Notion archive.
+
+    Only runs when ~/.muse-bridge/notion-archive-ds exists (meta only).
+    Never raises: any failure is reported on stderr and ignored.
+    """
+    try:
+        ds = read_config('notion-archive-ds')
+    except FileNotFoundError:
+        return
+    args = {
+        'parent': {'type': 'data_source_id', 'data_source_id': ds},
+        'pages': [{'properties': {
+            '时间': when, '发送方': sender, '接收方': to, '内容': plaintext}}],
+        'allow_async': False,
+    }
+    try:
+        r = subprocess.run(
+            ['/opt/hatch/bin/notion-cli', 'call-tool', '--name',
+             'notion-create-pages', '--arguments-json',
+             json.dumps(args, ensure_ascii=False)],
+            capture_output=True, text=True, timeout=60)
+        if json.loads(r.stdout).get('ok') is not True:
+            print('notion archive failed:', r.stdout[:200], file=sys.stderr)
+    except Exception as e:  # noqa: BLE001 - archive must never break sending
+        print('notion archive failed:', e, file=sys.stderr)
 
 
 def main():
@@ -58,6 +93,7 @@ def main():
         sys.exit(1)
     res = json.loads(r.stdout)
     print('sent, message_id:', res['result']['message_id'])
+    archive_to_notion(now, sender, to, plaintext)
 
 
 if __name__ == '__main__':

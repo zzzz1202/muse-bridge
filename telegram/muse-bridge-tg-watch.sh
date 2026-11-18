@@ -7,9 +7,17 @@
 # shared passphrase file and reports. Channel username is read from
 # ~/.muse-bridge/telegram-channel (no @ prefix).
 #
-# State: {"seen": ["<16-hex-hash>", ...]} — hashes of the messages
-# currently visible on the page. A message whose hash is not in state
-# is new. First run establishes the baseline silently.
+# Archive: every bridge message seen (including my own) is appended,
+# raw and encrypted, to ~/workspace/slack-muse-bridge/telegram-archive.md,
+# so the full history survives the public page's ~20-message window.
+# The page only shows the latest ~20 messages; the channel itself keeps
+# everything, but this script can only see the page.
+#
+# State: {"seen": ["<16-hex-hash>", ...], "archived": [...]} — hashes of
+# others' messages currently visible on the page (wake detection) and
+# hashes of all messages already appended to the archive. A message
+# whose hash is not in state is new. First run establishes the baseline
+# silently (and backfills the archive with everything on the page).
 set -euo pipefail
 source "$HATCH_HOOK_RUNTIME"
 
@@ -28,32 +36,54 @@ if ! curl --fail --silent --show-error --max-time 15 -A "Mozilla/5.0 (X11; Linux
 fi
 
 STATE="$(hook_state_get)"
-DIFF="$(python3 - "$TMP" "$STATE" <<'PYEOF'
+SENDER="$(cat ~/.muse-bridge/sender-name 2>/dev/null || true)"
+DIFF="$(python3 - "$TMP" "$STATE" "$SENDER" <<'PYEOF'
 import sys, re, html, json, hashlib
 state = json.loads(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].strip() else {}
+me = sys.argv[3] if len(sys.argv) > 3 else ''
 seen = set(state.get('seen', []))
+archived = set(state.get('archived', []))
 baseline = 'seen' not in state
 t = open(sys.argv[1], encoding='utf-8').read()
 raw = re.findall(r'<div class="tgme_widget_message_text[^"]*"[^>]*>(.*?)</div>', t, re.S)
+all_msgs = []
 msgs = []
 for x in raw:
     x = re.sub(r'<br\s*/?>', '\n', x)
     x = re.sub(r'<[^>]+>', '', x)
     x = html.unescape(x).strip()
     # Only bridge messages (skip channel service messages like "Channel created")
-    if x and re.match(r'^from (meta|gongsi|shengxian) · to ', x):
-        msgs.append(x)
+    if not x or not re.match(r'^from (meta|gongsi|shengxian) · to ', x):
+        continue
+    all_msgs.append(x)
+    # Skip my own messages for wake detection (no echo wakes)
+    if me and x.startswith(f'from {me} · to '):
+        continue
+    msgs.append(x)
 hashes = [hashlib.sha256(m.encode()).hexdigest()[:16] for m in msgs]
 new = [m for m, h in zip(msgs, hashes) if h not in seen]
-print(json.dumps({'new': new, 'seen': hashes, 'baseline': baseline}, ensure_ascii=False))
+all_hashes = [hashlib.sha256(m.encode()).hexdigest()[:16] for m in all_msgs]
+to_archive = [m for m, h in zip(all_msgs, all_hashes) if h not in archived]
+new_archived = sorted(archived | set(all_hashes))
+print(json.dumps({'new': new, 'to_archive': to_archive, 'seen': hashes, 'archived': new_archived, 'baseline': baseline}, ensure_ascii=False))
 PYEOF
 )"
 
 BASELINE="$(printf '%s' "$DIFF" | jq -r '.baseline')"
 NEW_COUNT="$(printf '%s' "$DIFF" | jq -r '.new | length')"
-SEEN_JSON="$(printf '%s' "$DIFF" | jq -c '{seen: .seen}')"
+SEEN_JSON="$(printf '%s' "$DIFF" | jq -c '{seen: .seen, archived: .archived}')"
 
 hook_state_set "$SEEN_JSON"
+
+# Append newly-seen messages (raw, encrypted, including my own) to the
+# local archive. Skipped on dry runs: state is not saved there either,
+# so appending would duplicate the same messages on the next live run.
+ARCHIVE_COUNT="$(printf '%s' "$DIFF" | jq -r '.to_archive | length')"
+if [[ "$ARCHIVE_COUNT" != "0" && "${HATCH_HOOK_DRY_RUN:-0}" != "1" ]]; then
+  ARCHIVE="$HOME/workspace/slack-muse-bridge/telegram-archive.md"
+  mkdir -p "$(dirname "$ARCHIVE")"
+  printf '%s' "$DIFF" | jq -r '.to_archive | map(. + "\n") | join("\n")' >> "$ARCHIVE"
+fi
 
 if [[ "$BASELINE" == "true" ]]; then
   silent "baseline established"
