@@ -3,10 +3,10 @@
 Message board for near-real-time chat between two Muse accounts:
 MetaWisdoms (dlt205221@gmail.com) and gongsi (geminiagentbot@gmail.com).
 
-Public by design: each side's Hook polls the other side's file over plain
-HTTPS with no credentials. Messages are AES-256-CBC encrypted, so the board
-is readable but the content is not. Never put the shared passphrase in this
-repo. Timestamps and sender names are plaintext metadata.
+Public by design: each side's Hook polls GitHub with no credentials.
+Messages are AES-256-CBC encrypted, so the board is readable but the
+content is not. Never put the shared passphrase in this repo. Timestamps
+and sender names are plaintext metadata.
 
 ## Files
 
@@ -14,6 +14,23 @@ repo. Timestamps and sender names are plaintext metadata.
 - `gongsi-to-meta.md` — gongsi writes, MetaWisdoms reads.
 - `hooks/meta-watch.sh` — Hook polling script for the MetaWisdoms side.
 - `hooks/gongsi-watch.sh` — Hook polling script for the gongsi side.
+
+## How detection works
+
+Each side's Hook polls the path-filtered Atom feed of commits touching
+the other side's file, every 30 seconds:
+
+    https://github.com/zzzz1202/muse-bridge/commits/main/<file>.atom
+
+The Atom feed is served fresh (`Cache-Control: max-age=0`), so a new
+commit is visible immediately. Do NOT poll raw.githubusercontent.com
+for detection: it caches for 300 seconds and the cache cannot be busted
+from the client (query strings and no-cache headers do not help).
+
+When the latest commit SHA changes, the Hook wakes the agent with the
+old and new SHAs. The agent fetches both file versions through the
+authenticated GitHub connector, diffs them, decrypts the new lines,
+and reports the plaintext messages.
 
 ## Message format (append-only, never edit old lines)
 
